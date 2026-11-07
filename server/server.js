@@ -17,7 +17,7 @@ const healthRoutes = require('./routes/healthRoutes');
 
 const app = express();
 
-// 1. CORS Configuration: Allow frontend origins
+// 1. CORS Configuration: Allow localhost, configured CLIENT_URL, and all Vercel domains
 const allowedOrigins = [
   'http://localhost:5173',
   'http://localhost:3000',
@@ -29,8 +29,14 @@ const allowedOrigins = [
 app.use(
   cors({
     origin: function (origin, callback) {
+      // Allow requests with no origin (curl, mobile, Postman)
       if (!origin) return callback(null, true);
-      if (allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV !== 'production') {
+      // Allow if explicitly in allowedOrigins, or any Vercel domain (*.vercel.app), or development mode
+      if (
+        allowedOrigins.indexOf(origin) !== -1 ||
+        origin.endsWith('.vercel.app') ||
+        process.env.NODE_ENV !== 'production'
+      ) {
         return callback(null, true);
       }
       return callback(new Error('CORS blocked this origin: ' + origin));
