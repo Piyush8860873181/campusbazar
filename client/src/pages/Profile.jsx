@@ -1,5 +1,5 @@
 // pages/Profile.jsx - Student profile management and account details
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { User, Phone, MapPin, Mail, Save, Sparkles, GraduationCap } from 'lucide-react';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -16,6 +16,17 @@ const Profile = () => {
     city: user?.city || '',
     role: user?.role || 'college student',
   });
+
+  useEffect(() => {
+    if (user) {
+      setFormData({
+        name: user.name || '',
+        phone: user.phone || '',
+        city: user.city || '',
+        role: user.role || 'college student',
+      });
+    }
+  }, [user]);
 
   const [loading, setLoading] = useState(false);
 

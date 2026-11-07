@@ -1,5 +1,5 @@
-// pages/Listings.jsx - OLX-style marketplace discovery with search, multi-filters, sorting and pagination
-import React, { useState, useEffect } from 'react';
+// pages/Listings.jsx - OLX-style marketplace discovery with reactive search, multi-filters, sorting and pagination
+import React, { useState, useEffect, useMemo } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import {
   SlidersHorizontal,
@@ -19,16 +19,19 @@ import { CardSkeleton } from '../components/Skeleton';
 const Listings = () => {
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const [filters, setFilters] = useState({
-    q: searchParams.get('q') || '',
-    category: searchParams.get('category') || 'All',
-    condition: searchParams.get('condition') || '',
-    city: searchParams.get('city') || '',
-    minPrice: searchParams.get('minPrice') || '',
-    maxPrice: searchParams.get('maxPrice') || '',
-    sort: searchParams.get('sort') || 'newest',
-    page: parseInt(searchParams.get('page') || '1', 10),
-  });
+  // 1. Single Source of Truth: Filters directly derived from URL query parameters
+  const filters = useMemo(() => {
+    return {
+      q: searchParams.get('q') || '',
+      category: searchParams.get('category') || 'All',
+      condition: searchParams.get('condition') || '',
+      city: searchParams.get('city') || '',
+      minPrice: searchParams.get('minPrice') || '',
+      maxPrice: searchParams.get('maxPrice') || '',
+      sort: searchParams.get('sort') || 'newest',
+      page: parseInt(searchParams.get('page') || '1', 10),
+    };
+  }, [searchParams]);
 
   const [listings, setListings] = useState([]);
   const [pagination, setPagination] = useState({
@@ -40,35 +43,46 @@ const Listings = () => {
   const [loading, setLoading] = useState(true);
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
 
-  // Sync state with URL params
-  useEffect(() => {
+  // Helper to update filters by pushing new URLSearchParams (reactive across whole app)
+  const setFilters = (updater) => {
+    const newFilters = typeof updater === 'function' ? updater(filters) : { ...filters, ...updater };
     const params = new URLSearchParams();
-    if (filters.q) params.set('q', filters.q);
-    if (filters.category && filters.category !== 'All') params.set('category', filters.category);
-    if (filters.condition) params.set('condition', filters.condition);
-    if (filters.city) params.set('city', filters.city);
-    if (filters.minPrice) params.set('minPrice', filters.minPrice);
-    if (filters.maxPrice) params.set('maxPrice', filters.maxPrice);
-    if (filters.sort && filters.sort !== 'newest') params.set('sort', filters.sort);
-    if (filters.page && filters.page > 1) params.set('page', filters.page.toString());
 
-    setSearchParams(params, { replace: true });
-  }, [filters, setSearchParams]);
+    if (newFilters.q?.trim()) params.set('q', newFilters.q.trim());
+    if (newFilters.category && newFilters.category !== 'All') params.set('category', newFilters.category);
+    if (newFilters.condition) params.set('condition', newFilters.condition);
+    if (newFilters.city?.trim()) params.set('city', newFilters.city.trim());
+    if (newFilters.minPrice) params.set('minPrice', newFilters.minPrice);
+    if (newFilters.maxPrice) params.set('maxPrice', newFilters.maxPrice);
+    if (newFilters.sort && newFilters.sort !== 'newest') params.set('sort', newFilters.sort);
+    if (newFilters.page && newFilters.page > 1) params.set('page', newFilters.page.toString());
 
-  // Fetch listings from API
+    setSearchParams(params);
+  };
+
+  // Fetch listings whenever searchParams changes (Navbar category click, search, city filter, pagination)
   useEffect(() => {
     const fetchListings = async () => {
       try {
         setLoading(true);
         const queryParams = new URLSearchParams();
-        if (filters.q) queryParams.set('q', filters.q);
-        if (filters.category && filters.category !== 'All') queryParams.set('category', filters.category);
-        if (filters.condition) queryParams.set('condition', filters.condition);
-        if (filters.city) queryParams.set('city', filters.city);
-        if (filters.minPrice) queryParams.set('minPrice', filters.minPrice);
-        if (filters.maxPrice) queryParams.set('maxPrice', filters.maxPrice);
-        if (filters.sort) queryParams.set('sort', filters.sort);
-        queryParams.set('page', filters.page.toString());
+        const q = searchParams.get('q');
+        const category = searchParams.get('category');
+        const condition = searchParams.get('condition');
+        const city = searchParams.get('city');
+        const minPrice = searchParams.get('minPrice');
+        const maxPrice = searchParams.get('maxPrice');
+        const sort = searchParams.get('sort');
+        const page = searchParams.get('page') || '1';
+
+        if (q?.trim()) queryParams.set('q', q.trim());
+        if (category && category !== 'All') queryParams.set('category', category);
+        if (condition) queryParams.set('condition', condition);
+        if (city?.trim()) queryParams.set('city', city.trim());
+        if (minPrice) queryParams.set('minPrice', minPrice);
+        if (maxPrice) queryParams.set('maxPrice', maxPrice);
+        if (sort && sort !== 'newest') queryParams.set('sort', sort);
+        queryParams.set('page', page);
         queryParams.set('limit', '12');
 
         const res = await api.get(`/listings?${queryParams.toString()}`);
@@ -89,27 +103,17 @@ const Listings = () => {
     };
 
     fetchListings();
-  }, [filters]);
+  }, [searchParams]);
 
   const resetFilters = () => {
-    setFilters({
-      q: '',
-      category: 'All',
-      condition: '',
-      city: '',
-      minPrice: '',
-      maxPrice: '',
-      sort: 'newest',
-      page: 1,
-    });
+    setSearchParams({});
   };
 
   const removeChip = (key) => {
-    setFilters((prev) => ({
-      ...prev,
-      [key]: key === 'category' ? 'All' : '',
-      page: 1,
-    }));
+    const params = new URLSearchParams(searchParams);
+    params.delete(key);
+    params.delete('page');
+    setSearchParams(params);
   };
 
   const activeChipCount = [
@@ -124,13 +128,13 @@ const Listings = () => {
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
       {/* OLX Breadcrumbs */}
       <nav className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
-        <Link to="/" className="hover:text-indigo-600">Home</Link>
+        <Link to="/" className="hover:text-indigo-600 transition-colors">Home</Link>
         <ArrowRight className="w-3 h-3" />
-        <Link to="/listings" className="hover:text-indigo-600">All Marketplace Ads</Link>
+        <Link to="/listings" className="hover:text-indigo-600 transition-colors font-medium">All Marketplace Ads</Link>
         {filters.category && filters.category !== 'All' && (
           <>
             <ArrowRight className="w-3 h-3" />
-            <span className="font-bold text-slate-800 dark:text-slate-200">{filters.category}</span>
+            <span className="font-bold text-indigo-600 dark:text-indigo-400">{filters.category}</span>
           </>
         )}
       </nav>
@@ -138,8 +142,13 @@ const Listings = () => {
       {/* Header Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
         <div>
-          <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white">
-            {filters.category && filters.category !== 'All' ? filters.category : 'All Student Items'}
+          <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white flex items-center gap-2">
+            <span>{filters.category && filters.category !== 'All' ? filters.category : 'All Student Items'}</span>
+            {filters.city && (
+              <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                in {filters.city}
+              </span>
+            )}
           </h1>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
             Showing {listings.length} of {pagination.total} ads available for hand-to-hand campus meetup
@@ -150,7 +159,7 @@ const Listings = () => {
         <div className="flex items-center gap-2 md:hidden">
           <button
             onClick={() => setMobileFilterOpen(true)}
-            className="flex-1 flex items-center justify-center gap-2 py-2 px-4 bg-indigo-600 text-white rounded-xl text-xs font-bold shadow-md"
+            className="flex-1 flex items-center justify-center gap-2 py-2 px-4 bg-indigo-600 text-white rounded-xl text-xs font-bold shadow-md hover:bg-indigo-700 transition-colors"
           >
             <SlidersHorizontal className="w-4 h-4" />
             <span>Filter Ads {activeChipCount > 0 && `(${activeChipCount})`}</span>
@@ -166,7 +175,7 @@ const Listings = () => {
           {filters.q && (
             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 text-xs font-bold rounded-lg border border-indigo-200 dark:border-indigo-800">
               <span>"{filters.q}"</span>
-              <button onClick={() => removeChip('q')} className="hover:text-rose-500">
+              <button onClick={() => removeChip('q')} className="hover:text-rose-500 transition-colors" aria-label="Remove search filter">
                 <X className="w-3.5 h-3.5" />
               </button>
             </span>
@@ -174,8 +183,8 @@ const Listings = () => {
 
           {filters.category && filters.category !== 'All' && (
             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 text-xs font-bold rounded-lg border border-indigo-200 dark:border-indigo-800">
-              <span>{filters.category}</span>
-              <button onClick={() => removeChip('category')} className="hover:text-rose-500">
+              <span>Category: {filters.category}</span>
+              <button onClick={() => removeChip('category')} className="hover:text-rose-500 transition-colors" aria-label="Remove category filter">
                 <X className="w-3.5 h-3.5" />
               </button>
             </span>
@@ -184,7 +193,7 @@ const Listings = () => {
           {filters.condition && (
             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 text-xs font-bold rounded-lg border border-indigo-200 dark:border-indigo-800">
               <span>Condition: {filters.condition}</span>
-              <button onClick={() => removeChip('condition')} className="hover:text-rose-500">
+              <button onClick={() => removeChip('condition')} className="hover:text-rose-500 transition-colors" aria-label="Remove condition filter">
                 <X className="w-3.5 h-3.5" />
               </button>
             </span>
@@ -193,7 +202,7 @@ const Listings = () => {
           {filters.city && (
             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 text-xs font-bold rounded-lg border border-indigo-200 dark:border-indigo-800">
               <span>City: {filters.city}</span>
-              <button onClick={() => removeChip('city')} className="hover:text-rose-500">
+              <button onClick={() => removeChip('city')} className="hover:text-rose-500 transition-colors" aria-label="Remove city filter">
                 <X className="w-3.5 h-3.5" />
               </button>
             </span>
@@ -201,7 +210,7 @@ const Listings = () => {
 
           <button
             onClick={resetFilters}
-            className="text-xs font-bold text-rose-500 hover:underline ml-2"
+            className="text-xs font-bold text-rose-500 hover:text-rose-600 dark:hover:text-rose-400 hover:underline ml-2"
           >
             Clear all
           </button>
@@ -240,7 +249,7 @@ const Listings = () => {
               </p>
               <button
                 onClick={resetFilters}
-                className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold shadow-md hover:bg-indigo-700"
+                className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold shadow-md hover:bg-indigo-700 transition-colors"
               >
                 Reset All Filters
               </button>
@@ -261,13 +270,13 @@ const Listings = () => {
                 onClick={() =>
                   setFilters((prev) => ({ ...prev, page: Math.max(1, prev.page - 1) }))
                 }
-                className="flex items-center gap-1 px-4 py-2 text-xs font-bold rounded-xl border border-slate-300 dark:border-slate-700 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-slate-800"
+                className="flex items-center gap-1 px-4 py-2 text-xs font-bold rounded-xl border border-slate-300 dark:border-slate-700 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
               >
                 <ChevronLeft className="w-4 h-4" />
                 <span>Previous</span>
               </button>
 
-              <span className="text-xs font-medium text-slate-500">
+              <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
                 Page {pagination.page} of {pagination.pages}
               </span>
 
@@ -276,7 +285,7 @@ const Listings = () => {
                 onClick={() =>
                   setFilters((prev) => ({ ...prev, page: prev.page + 1 }))
                 }
-                className="flex items-center gap-1 px-4 py-2 text-xs font-bold rounded-xl border border-slate-300 dark:border-slate-700 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-slate-800"
+                className="flex items-center gap-1 px-4 py-2 text-xs font-bold rounded-xl border border-slate-300 dark:border-slate-700 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
               >
                 <span>Next</span>
                 <ChevronRight className="w-4 h-4" />
@@ -296,7 +305,7 @@ const Listings = () => {
               </span>
               <button
                 onClick={() => setMobileFilterOpen(false)}
-                className="p-1 rounded-lg text-slate-500 hover:bg-slate-100"
+                className="p-1 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -304,7 +313,10 @@ const Listings = () => {
             <FilterSidebar
               filters={filters}
               setFilters={setFilters}
-              onReset={resetFilters}
+              onReset={() => {
+                resetFilters();
+                setMobileFilterOpen(false);
+              }}
               isMobile={true}
               onCloseMobile={() => setMobileFilterOpen(false)}
             />

@@ -13,10 +13,12 @@ import {
   RotateCcw,
 } from 'lucide-react';
 import api from '../services/api';
+import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { formatPrice, formatDate, getImageUrl } from '../utils/formatters';
 
 const MyListings = () => {
+  const { user } = useAuth();
   const [listings, setListings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('all'); // 'all', 'active', 'sold'
@@ -38,8 +40,10 @@ const MyListings = () => {
   };
 
   useEffect(() => {
-    fetchMyListings();
-  }, []);
+    if (user) {
+      fetchMyListings();
+    }
+  }, [user?._id]);
 
   const handleToggleSold = async (id) => {
     try {

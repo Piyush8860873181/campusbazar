@@ -12,6 +12,7 @@ import {
   User,
 } from 'lucide-react';
 import api from '../services/api';
+import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import {
   formatDate,
@@ -22,6 +23,7 @@ import {
 } from '../utils/formatters';
 
 const Inquiries = () => {
+  const { user } = useAuth();
   const [received, setReceived] = useState([]);
   const [sent, setSent] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -50,8 +52,10 @@ const Inquiries = () => {
       }
     };
 
-    fetchInquiries();
-  }, [showToast]);
+    if (user) {
+      fetchInquiries();
+    }
+  }, [user?._id, showToast]);
 
   const activeList = activeTab === 'received' ? received : sent;
 
